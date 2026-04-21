@@ -2,6 +2,8 @@ import os
 import io
 import logging
 import asyncio
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from dotenv import load_dotenv
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
@@ -14,6 +16,21 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b'OK')
+
+    def log_message(self, format, *args):
+        pass  # suppress access logs
+
+
+def start_health_server():
+    port = int(os.getenv('PORT', 8080))
+    HTTPServer(('0.0.0.0', port), HealthHandler).serve_forever()
 
 
 def parse_channel(value: str):
@@ -81,6 +98,9 @@ async def main():
     if missing:
         logger.error(f"Missing required env vars: {', '.join(missing)}")
         return
+
+    threading.Thread(target=start_health_server, daemon=True).start()
+    logger.info("Health check server started on port 8080")
 
     await client.start(phone=PHONE_NUMBER)
     me = await client.get_me()
