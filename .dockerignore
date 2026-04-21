@@ -1,0 +1,9 @@
+.env
+*.session
+*.session-journal
+__pycache__/
+*.pyc
+.git/
+generate_session.py
+get_channel_id.py
+*.md

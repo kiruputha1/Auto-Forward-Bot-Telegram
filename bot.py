@@ -4,6 +4,7 @@ import logging
 import asyncio
 from dotenv import load_dotenv
 from telethon import TelegramClient, events
+from telethon.sessions import StringSession
 from telethon.tl.types import DocumentAttributeFilename
 
 load_dotenv()
@@ -26,10 +27,13 @@ def parse_channel(value: str):
 API_ID = int(os.getenv('API_ID'))
 API_HASH = os.getenv('API_HASH')
 PHONE_NUMBER = os.getenv('PHONE_NUMBER')
+SESSION_STRING = os.getenv('SESSION_STRING')
 SOURCE_CHANNEL = parse_channel(os.getenv('SOURCE_CHANNEL'))
 TARGET_CHANNEL = parse_channel(os.getenv('TARGET_CHANNEL'))
 
-client = TelegramClient('session', API_ID, API_HASH)
+# Use StringSession for cloud/Docker deployments, fall back to file session locally
+session = StringSession(SESSION_STRING) if SESSION_STRING else 'session'
+client = TelegramClient(session, API_ID, API_HASH)
 
 
 @client.on(events.NewMessage(chats=SOURCE_CHANNEL))
