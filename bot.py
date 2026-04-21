@@ -48,8 +48,11 @@ SESSION_STRING = os.getenv('SESSION_STRING')
 SOURCE_CHANNEL = parse_channel(os.getenv('SOURCE_CHANNEL'))
 TARGET_CHANNEL = parse_channel(os.getenv('TARGET_CHANNEL'))
 
-# Use StringSession for cloud/Docker deployments, fall back to file session locally
-session = StringSession(SESSION_STRING) if SESSION_STRING else 'session'
+try:
+    session = StringSession(SESSION_STRING) if SESSION_STRING else 'session'
+except ValueError:
+    logger.error("SESSION_STRING is invalid. Run generate_session.py locally to get a valid one.")
+    raise
 client = TelegramClient(session, API_ID, API_HASH)
 
 
