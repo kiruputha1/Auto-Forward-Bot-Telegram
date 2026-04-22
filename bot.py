@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 from telethon.tl.types import DocumentAttributeFilename
+from telethon.errors import FloodWaitError
 
 load_dotenv()
 
@@ -54,6 +55,7 @@ except ValueError:
     logger.error("SESSION_STRING is invalid. Run generate_session.py locally to get a valid one.")
     raise
 client = TelegramClient(session, API_ID, API_HASH)
+transfer_semaphore = asyncio.Semaphore(1)
 
 
 @client.on(events.NewMessage(chats=SOURCE_CHANNEL))
@@ -63,30 +65,38 @@ async def handle_new_message(event):
     if not message.media:
         return
 
-    try:
-        # Extract original filename from document attributes
-        filename = None
-        if hasattr(message.media, 'document'):
-            for attr in message.media.document.attributes:
-                if isinstance(attr, DocumentAttributeFilename):
-                    filename = attr.file_name
-                    break
+    filename = None
+    if hasattr(message.media, 'document'):
+        for attr in message.media.document.attributes:
+            if isinstance(attr, DocumentAttributeFilename):
+                filename = attr.file_name
+                break
 
-        file_bytes = await client.download_media(message, bytes)
+    async with transfer_semaphore:
+        for attempt in range(3):
+            try:
+                file_bytes = await client.download_media(message, bytes)
 
-        # Wrap in BytesIO and set the original filename so Telegram preserves it
-        file_obj = io.BytesIO(file_bytes)
-        file_obj.name = filename or 'file'
+                file_obj = io.BytesIO(file_bytes)
+                file_obj.name = filename or 'file'
 
-        await client.send_file(
-            TARGET_CHANNEL,
-            file_obj,
-            caption=message.message or None,
-            force_document=True,
-        )
-        logger.info(f"Sent message {message.id} ({filename}) to {TARGET_CHANNEL}")
-    except Exception as e:
-        logger.error(f"Error sending message {message.id}: {e}")
+                await client.send_file(
+                    TARGET_CHANNEL,
+                    file_obj,
+                    caption=message.message or None,
+                    force_document=True,
+                )
+                logger.info(f"Sent message {message.id} ({filename}) to {TARGET_CHANNEL}")
+                break
+            except FloodWaitError as e:
+                logger.warning(f"Flood wait {e.seconds}s for message {message.id}, retrying...")
+                await asyncio.sleep(e.seconds)
+            except Exception as e:
+                logger.error(f"Error sending message {message.id} (attempt {attempt + 1}): {e}")
+                if attempt < 2:
+                    await asyncio.sleep(2 ** attempt)
+                else:
+                    logger.error(f"Giving up on message {message.id} ({filename})")
 
 
 async def main():
