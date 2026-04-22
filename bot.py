@@ -1,8 +1,8 @@
 import os
-import io
 import logging
 import asyncio
 import threading
+import tempfile
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from dotenv import load_dotenv
 from telethon import TelegramClient, events
@@ -73,30 +73,40 @@ async def handle_new_message(event):
                 break
 
     async with transfer_semaphore:
-        for attempt in range(3):
-            try:
-                file_bytes = await client.download_media(message, bytes)
+        tmp_path = None
+        try:
+            suffix = os.path.splitext(filename)[1] if filename else ''
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                tmp_path = tmp.name
 
-                file_obj = io.BytesIO(file_bytes)
-                file_obj.name = filename or 'file'
+            logger.info(f"Downloading message {message.id} ({filename}) to temp file...")
+            await client.download_media(message, file=tmp_path)
 
-                await client.send_file(
-                    TARGET_CHANNEL,
-                    file_obj,
-                    caption=message.message or None,
-                    force_document=True,
-                )
-                logger.info(f"Sent message {message.id} ({filename}) to {TARGET_CHANNEL}")
-                break
-            except FloodWaitError as e:
-                logger.warning(f"Flood wait {e.seconds}s for message {message.id}, retrying...")
-                await asyncio.sleep(e.seconds)
-            except Exception as e:
-                logger.error(f"Error sending message {message.id} (attempt {attempt + 1}): {e}")
-                if attempt < 2:
-                    await asyncio.sleep(2 ** attempt)
-                else:
-                    logger.error(f"Giving up on message {message.id} ({filename})")
+            for attempt in range(3):
+                try:
+                    await client.send_file(
+                        TARGET_CHANNEL,
+                        tmp_path,
+                        caption=message.message or None,
+                        force_document=True,
+                        attributes=[DocumentAttributeFilename(filename)] if filename else [],
+                    )
+                    logger.info(f"Sent message {message.id} ({filename}) to {TARGET_CHANNEL}")
+                    break
+                except FloodWaitError as e:
+                    logger.warning(f"Flood wait {e.seconds}s for message {message.id}, retrying...")
+                    await asyncio.sleep(e.seconds)
+                except Exception as e:
+                    logger.error(f"Error uploading message {message.id} (attempt {attempt + 1}): {e}")
+                    if attempt < 2:
+                        await asyncio.sleep(2 ** attempt)
+                    else:
+                        logger.error(f"Giving up on message {message.id} ({filename})")
+        except Exception as e:
+            logger.error(f"Error downloading message {message.id}: {e}")
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                os.remove(tmp_path)
 
 
 async def main():
