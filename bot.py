@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 from telethon.tl.functions.messages import ForwardMessagesRequest
+from telethon.tl.types import DocumentAttributeFilename
 from telethon.errors import FloodWaitError
 
 load_dotenv()
@@ -63,6 +64,12 @@ async def handle_new_message(event):
 
     if not message.media:
         return
+
+    if hasattr(message.media, 'document'):
+        mime_type = message.media.document.mime_type
+        if mime_type != 'video/x-matroska':
+            logger.info(f"Skipping non-MKV file: {message.id}")
+            return
 
     async with transfer_semaphore:
         for attempt in range(3):
