@@ -264,4 +264,4 @@ If you encounter any issues or have questions:
 
 ---
 
-**Note**: This bot is designed for educational and legitimate use only. Ensure you have proper permissions and comply with Telegram's Terms of Service and applicable laws when using this bot.
+**Note**: This bot is designed for educational and legitimate use only. Ensure you have proper permissions and comply with Telegram's Terms of Service and applicable laws when using this bot. -
